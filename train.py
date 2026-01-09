@@ -7,7 +7,7 @@ import json
 import collections
 from model import NERTransformer
 import os
-from tokenizers import Tokenizer
+import tiktoken
 
 
 def load_data(filename):
@@ -23,15 +23,12 @@ def build_tag_map(data):
     for item in data:
         tags.update(item["tags"])
 
-    tag_map = {"[PAD]": 0}  # 0 will be ignored in loss using ignore_index
-    # We also need a generic "O" if it's not present (it usually is)
-    # Let's ensure O is there and mapped normally if strict_mapping isn't key
+    tag_map = {"[PAD]": 0}
 
-    # We want consistent mapping.
     sorted_tags = sorted(list(tags))
     if "O" in sorted_tags:
         sorted_tags.remove("O")
-        sorted_tags.insert(0, "O")  # Put O first after PAD usually
+        sorted_tags.insert(0, "O")
 
     for tag in sorted_tags:
         if tag != "[PAD]":
@@ -41,11 +38,10 @@ def build_tag_map(data):
 
 
 class NERDataset(Dataset):
-    def __init__(self, data, tokenizer, tag_map):
+    def __init__(self, data, encoding, tag_map):
         self.data = data
-        self.tokenizer = tokenizer
+        self.enc = encoding
         self.tag_map = tag_map
-        self.pad_token_id = tokenizer.token_to_id("[PAD]")
 
     def __len__(self):
         return len(self.data)
@@ -58,169 +54,120 @@ class NERDataset(Dataset):
         token_ids = []
         label_ids = []
 
-        # [CLS]
-        token_ids.append(self.tokenizer.token_to_id("[CLS]"))
-        label_ids.append(self.tag_map["O"])  # Use 'O' for special tokens
-
         for word, tag in zip(tokens, tags):
-            # Encode word without special tokens
-            enc = self.tokenizer.encode(word, add_special_tokens=False)
-            subwords = enc.ids
-
+            subwords = self.enc.encode(word)
             if not subwords:
-                # Fallback for weird cases or empty strings
                 continue
 
             token_ids.extend(subwords)
-
-            # Map tag
             current_tag_id = self.tag_map[tag]
 
-            # Logic: B-X -> I-X for subwords. I-X -> I-X. O -> O.
             if tag.startswith("B-"):
-                label_ids.append(current_tag_id)  # First subword gets B-
-
-                # Determine I- tag
+                label_ids.append(current_tag_id)
                 i_tag_str = "I-" + tag[2:]
                 i_tag_id = self.tag_map.get(i_tag_str, current_tag_id)
-
                 label_ids.extend([i_tag_id] * (len(subwords) - 1))
             else:
                 label_ids.extend([current_tag_id] * len(subwords))
 
-        # [SEP]
-        token_ids.append(self.tokenizer.token_to_id("[SEP]"))
-        label_ids.append(self.tag_map["O"])
-
         return torch.tensor(token_ids), torch.tensor(label_ids)
 
 
-def collate_fn(batch):
+def collate_fn(batch, pad_id):
     tokens, tags = zip(*batch)
-    # We need to know the pad value for tokenizer. usually 0 if defined first in special tokens
-    # But let's check input
-    # In train_tokenizer we put [PAD] first, so id is 0.
-
-    padded_tokens = pad_sequence(tokens, batch_first=True, padding_value=0)
+    padded_tokens = pad_sequence(tokens, batch_first=True, padding_value=pad_id)
     padded_tags = pad_sequence(
         tags, batch_first=True, padding_value=0
-    )  # 0 is [PAD] in tag_map too
+    )  # 0 is [PAD] in tag_map
     return padded_tokens, padded_tags
 
 
 def train():
-    # Setup
     train_data = load_data("train.jsonl")
     test_data = load_data("test.jsonl")
 
-    # Load Tokenizer
-    tokenizer = Tokenizer.from_file("tokenizer.json")
-    vocab_size = tokenizer.get_vocab_size()
+    encoding = tiktoken.get_encoding("gpt2")
+    PAD_ID = encoding.n_vocab
+    vocab_size = encoding.n_vocab + 1
 
-    # Build Tag Map from TRAIN data
     tag_map = build_tag_map(train_data)
     inv_tag_map = {v: k for k, v in tag_map.items()}
 
-    print(f"Vocab size: {vocab_size}")
+    print(f"Vocab size: {vocab_size} (tiktoken + pad)")
     print(f"Num tags: {len(tag_map)}")
 
-    # Hyperparameters
     BATCH_SIZE = 16
-    D_MODEL = 128  # Increased d_model for subword complexity
+    D_MODEL = 128
     NHEAD = 4
     NUM_LAYERS = 2
     DIM_FEEDFORWARD = 256
-    MAX_SEQ_LEN = 200  # Subwords increase length
+    MAX_SEQ_LEN = 256
     LR = 0.001
-    EPOCHS = 15  # Increased epochs for scheduler
+    EPOCHS = 10
 
-    # Device
-    if torch.backends.mps.is_available():
-        device = torch.device("mps")
-        print("Using MPS device.")
-    elif torch.cuda.is_available():
-        device = torch.device("cuda")
-        print("Using CUDA device.")
-    else:
-        device = torch.device("cpu")
-        print("Using CPU device.")
+    device = torch.device(
+        "mps"
+        if torch.backends.mps.is_available()
+        else "cuda" if torch.cuda.is_available() else "cpu"
+    )
+    print(f"Using device: {device}")
 
-    # DataLoaders # Pass tokenizer
-    train_dataset = NERDataset(train_data, tokenizer, tag_map)
+    train_dataset = NERDataset(train_data, encoding, tag_map)
     train_loader = DataLoader(
-        train_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_fn
+        train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        collate_fn=lambda b: collate_fn(b, PAD_ID),
     )
 
-    test_dataset = NERDataset(test_data, tokenizer, tag_map)
-    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, collate_fn=collate_fn)
+    test_dataset = NERDataset(test_data, encoding, tag_map)
+    test_loader = DataLoader(
+        test_dataset, batch_size=BATCH_SIZE, collate_fn=lambda b: collate_fn(b, PAD_ID)
+    )
 
-    # Model
     model = NERTransformer(
         vocab_size=vocab_size,
         d_model=D_MODEL,
         nhead=NHEAD,
         num_encoder_layers=NUM_LAYERS,
         dim_feedforward=DIM_FEEDFORWARD,
-        max_seq_length=MAX_SEQ_LEN,  # Not strictly enforced in arch (only PE), but good reference
+        max_seq_length=MAX_SEQ_LEN,
         num_classes=len(tag_map),
         dropout=0.1,
     ).to(device)
 
-    criterion = nn.CrossEntropyLoss(ignore_index=0)  # Ignore [PAD]
-    optimizer = optim.AdamW(
-        model.parameters(), lr=LR
-    )  # AdamW is better for Transformers
-
-    # Scheduler
+    criterion = nn.CrossEntropyLoss(ignore_index=0)
+    optimizer = optim.AdamW(model.parameters(), lr=LR)
     scheduler = optim.lr_scheduler.OneCycleLR(
         optimizer, max_lr=LR, epochs=EPOCHS, steps_per_epoch=len(train_loader)
     )
 
-    # Logs
     with open("training_log.txt", "w") as log_file:
         for epoch in range(EPOCHS):
             model.train()
             total_loss = 0
             for tokens, tags in train_loader:
                 tokens, tags = tokens.to(device), tags.to(device)
-
-                optimizer.zero_grad()
-
-                # Check seq length, if > max_len, truncate?
-                # Our collate pads, but PE is fixed size.
-                # If batch is longer than PE Max Len, it will crash.
-                # Just clip for safety if needed, or rely on dataset gen not being huge.
                 if tokens.size(1) > MAX_SEQ_LEN:
                     tokens = tokens[:, :MAX_SEQ_LEN]
                     tags = tags[:, :MAX_SEQ_LEN]
 
-                src_key_padding_mask = tokens == 0
-
+                optimizer.zero_grad()
+                src_key_padding_mask = tokens == PAD_ID
                 output = model(tokens, src_key_padding_mask=src_key_padding_mask)
                 loss = criterion(output.view(-1, len(tag_map)), tags.view(-1))
-
                 loss.backward()
                 optimizer.step()
                 scheduler.step()
-
                 total_loss += loss.item()
 
             avg_train_loss = total_loss / len(train_loader)
 
-            # Validation
             model.eval()
             val_loss = 0
-            correct_tokens = 0
-            total_tokens = 0
-
-            # Metrics for P/R (Micro-average excluding O)
-            tp = 0
-            fp = 0
-            fn = 0
-            o_id = tag_map.get(
-                "O", 0
-            )  # Fallback to 0 if 'O' not found (though it should be)
-
+            correct_tokens, total_tokens = 0, 0
+            tp, fp, fn = 0, 0, 0
+            o_id = tag_map.get("O", 0)
             monitor_samples = []
 
             with torch.no_grad():
@@ -230,8 +177,7 @@ def train():
                         tokens = tokens[:, :MAX_SEQ_LEN]
                         tags = tags[:, :MAX_SEQ_LEN]
 
-                    src_key_padding_mask = tokens == 0
-
+                    src_key_padding_mask = tokens == PAD_ID
                     output = model(tokens, src_key_padding_mask=src_key_padding_mask)
                     loss = criterion(output.view(-1, len(tag_map)), tags.view(-1))
                     val_loss += loss.item()
@@ -241,47 +187,30 @@ def train():
                     correct_tokens += ((pred_tags == tags) & mask).sum().item()
                     total_tokens += mask.sum().item()
 
-                    # Compute Precision/Recall
-                    # We only care about non-pad tokens for stats
-                    valid_tags = tags[mask]
-                    valid_preds = pred_tags[mask]
-
-                    for t, p in zip(valid_tags, valid_preds):
-                        t = t.item()
-                        p = p.item()
-
+                    v_tags = tags[mask]
+                    v_preds = pred_tags[mask]
+                    for t, p in zip(v_tags, v_preds):
+                        t, p = t.item(), p.item()
                         if t == o_id and p == o_id:
-                            continue  # True Negative
-
+                            continue
                         if t == p:
-                            # Correct prediction (and we know t != O because of logic below if we structured it differently,
-                            # but here t==p. If t==O, we continued. So t!=O)
                             tp += 1
                         else:
-                            # Mismatch
                             if p != o_id:
-                                fp += 1  # Predicted an entity, but it was wrong (either O or different entity)
+                                fp += 1
                             if t != o_id:
-                                fn += 1  # Was an entity, but predicted wrong (either O or different entity)
+                                fn += 1
 
                     if batch_idx == 0:
-                        # Decode 3 samples
-                        tokens_cpu = tokens.cpu().numpy()
-                        tags_cpu = tags.cpu().numpy()
-                        preds_cpu = pred_tags.cpu().numpy()
-
+                        t_cpu, tags_cpu, preds_cpu = (
+                            tokens.cpu().numpy(),
+                            tags.cpu().numpy(),
+                            pred_tags.cpu().numpy(),
+                        )
                         for i in range(min(3, len(tokens))):
-                            # Decode back to string
-                            # Note: We can decode subwords, but tags are per subword.
-                            # Let's print subwords + tags to see BPE effect
-
-                            length = (tokens[i] != 0).sum()
-                            # Get tokens
-                            # id_to_token might return None for some?
-
+                            length = (tokens[i] != PAD_ID).sum()
                             dec_tokens = [
-                                tokenizer.id_to_token(tid)
-                                for tid in tokens_cpu[i][:length]
+                                encoding.decode([tid]) for tid in t_cpu[i][:length]
                             ]
                             true_labels = [
                                 inv_tag_map.get(t, "?") for t in tags_cpu[i][:length]
@@ -289,81 +218,69 @@ def train():
                             pred_labels = [
                                 inv_tag_map.get(t, "?") for t in preds_cpu[i][:length]
                             ]
-
                             monitor_samples.append(
                                 list(zip(dec_tokens, true_labels, pred_labels))
                             )
 
             avg_val_loss = val_loss / len(test_loader)
-            val_accuracy = correct_tokens / total_tokens if total_tokens > 0 else 0
+            val_acc = correct_tokens / total_tokens if total_tokens > 0 else 0
+            prec = tp / (tp + fp) if (tp + fp) > 0 else 0
+            rec = tp / (tp + fn) if (tp + fn) > 0 else 0
+            f1 = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0
 
-            # P/R Calculation
-            precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-            recall = tp / (tp + fn) if (tp + fn) > 0 else 0
-            f1 = (
-                2 * precision * recall / (precision + recall)
-                if (precision + recall) > 0
-                else 0
-            )
-
-            metrics = f"Epoch {epoch+1}/{EPOCHS} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | Val Acc: {val_accuracy:.4f} | F1: {f1:.4f} (P: {precision:.4f}, R: {recall:.4f})"
+            metrics = f"Epoch {epoch+1}/{EPOCHS} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | Val Acc: {val_acc:.4f} | F1: {f1:.4f} (P: {prec:.4f}, R: {rec:.4f})"
             print(metrics)
             log_file.write(metrics + "\n")
 
             log_file.write(f"Sample Predictions (Epoch {epoch+1}):\n")
             for idx, sample in enumerate(monitor_samples):
-                header = f"\n--- Test Sample {idx+1} ---\n"
-                header += f"{'Subword':<20} {'True':<20} {'Pred':<20}\n"
-                header += "-" * 60 + "\n"
+                header = (
+                    f"\n--- Test Sample {idx+1} ---\nSubword{'':<13} True{'':<16} Pred\n"
+                    + "-" * 60
+                    + "\n"
+                )
                 log_file.write(header)
-
                 for w, t, p in sample:
-                    line = f"{str(w):<20} {t:<20} {p:<20}\n"
-                    log_file.write(line)
-
+                    log_file.write(f"{str(w):<20} {t:<20} {p:<20}\n")
             log_file.write("-" * 60 + "\n\n")
 
-    # Serialize artifacts
     torch.save(model.state_dict(), "ner_model.pth")
     with open("tag_map.json", "w") as f:
         json.dump(tag_map, f)
-    # Tokenizer is already saved as tokenizer.json
-    print("Model, tokenizer, and tag_map saved.")
+    print("Model and tag_map saved.")
 
-    # Generate final prediction file
+    # Generate predictions.txt
+    print("Generating predictions.txt...")
+    model.eval()
     with open("predictions.txt", "w") as f:
-        f.write("--- Final BPE Model Predictions ---\n\n")
-        model.eval()
+        f.write("--- tiktoken Model Predictions ---\n\n")
         with torch.no_grad():
             for batch_idx, (tokens, tags) in enumerate(test_loader):
                 tokens, tags = tokens.to(device), tags.to(device)
                 if tokens.size(1) > MAX_SEQ_LEN:
                     tokens = tokens[:, :MAX_SEQ_LEN]
                     tags = tags[:, :MAX_SEQ_LEN]
-                src_key_padding_mask = tokens == 0
+
+                src_key_padding_mask = tokens == PAD_ID
                 output = model(tokens, src_key_padding_mask=src_key_padding_mask)
-                pred_tags = torch.argmax(output, dim=-1)
+                preds = torch.argmax(output, dim=-1)
 
-                tokens_cpu = tokens.cpu().numpy()
-                tags_cpu = tags.cpu().numpy()
-                preds_cpu = pred_tags.cpu().numpy()
-
+                t_cpu, tags_cpu, p_cpu = (
+                    tokens.cpu().numpy(),
+                    tags.cpu().numpy(),
+                    preds.cpu().numpy(),
+                )
                 for i in range(len(tokens)):
-                    length = (tokens[i] != 0).sum()
-                    dec_tokens = [
-                        tokenizer.id_to_token(tid) for tid in tokens_cpu[i][:length]
-                    ]
-                    true_labels = [
-                        inv_tag_map.get(t, "?") for t in tags_cpu[i][:length]
-                    ]
-                    pred_labels = [
-                        inv_tag_map.get(t, "?") for t in preds_cpu[i][:length]
-                    ]
+                    length = (tokens[i] != PAD_ID).sum()
+                    dec_t = [encoding.decode([tid]) for tid in t_cpu[i][:length]]
+                    true_l = [inv_tag_map.get(t, "?") for t in tags_cpu[i][:length]]
+                    pred_l = [inv_tag_map.get(t, "?") for t in p_cpu[i][:length]]
 
                     f.write(f"Example {batch_idx * BATCH_SIZE + i + 1}:\n")
-                    for w, t, p in zip(dec_tokens, true_labels, pred_labels):
+                    for w, t, p in zip(dec_t, true_l, pred_l):
                         f.write(f"{str(w):<20} {t:<20} {p:<20}\n")
                     f.write("\n")
+    print("predictions.txt generated.")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 import json
-from tokenizers import Tokenizer
+import tiktoken
 from model import NERTransformer
 import sys
 
@@ -11,22 +11,23 @@ def interactive_inference():
     try:
         with open("tag_map.json", "r") as f:
             tag_map = json.load(f)
-        tokenizer = Tokenizer.from_file("tokenizer.json")
+        encoding = tiktoken.get_encoding("gpt2")
     except FileNotFoundError:
         print(
-            "Error: Required files (tag_map.json or tokenizer.json) not found. Please train the model first."
+            "Error: Required files (tag_map.json) not found. Please train the model first."
         )
         return
 
     inv_tag_map = {v: k for k, v in tag_map.items()}
-    vocab_size = tokenizer.get_vocab_size()
+    PAD_ID = encoding.n_vocab
+    vocab_size = encoding.n_vocab + 1
 
     # Model Hyperparameters (must match train.py)
     D_MODEL = 128
     NHEAD = 4
     NUM_LAYERS = 2
     DIM_FEEDFORWARD = 256
-    MAX_SEQ_LEN = 200
+    MAX_SEQ_LEN = 256
     NUM_CLASSES = len(tag_map)
 
     # Device
@@ -57,7 +58,7 @@ def interactive_inference():
         return
 
     print("\n" + "=" * 60)
-    print("NER INFERENCE TOOL - DEEP DIVE MODE")
+    print("NER INFERENCE TOOL - TIKTOKEN EDITION")
     print("Enter a sentence to analyze entities (Diseases/Medications).")
     print("Type 'quit' or 'exit' to stop.")
     print("=" * 60 + "\n")
@@ -73,26 +74,17 @@ def interactive_inference():
         if text.lower() in ["quit", "exit"]:
             break
 
-        # Tokenization matches training (NERDataset)
-        # We manually add [CLS] and [SEP]
-        cls_id = tokenizer.token_to_id("[CLS]")
-        sep_id = tokenizer.token_to_id("[SEP]")
-
-        # Encode the full text
-        encoding = tokenizer.encode(text, add_special_tokens=False)
-        token_ids = [cls_id] + encoding.ids + [sep_id]
-        subwords = ["[CLS]"] + encoding.tokens + ["[SEP]"]
+        # Tokenization matches training
+        token_ids = encoding.encode(text)
+        subwords = [encoding.decode([tid]) for tid in token_ids]
 
         # Prepare input tensor
         input_tensor = torch.tensor([token_ids]).to(device)
 
         # Inference
         with torch.no_grad():
-            # In training we used src_key_padding_mask, but for single sentence it's all False
-            output = model(input_tensor)  # [1, seq_len, num_classes]
-
-            # Apply Softmax to get probabilities
-            probs = F.softmax(output, dim=-1)[0]  # [seq_len, num_classes]
+            output = model(input_tensor)
+            probs = F.softmax(output, dim=-1)[0]
 
         # Get Top 3 predictions per token
         top_probs, top_indices = torch.topk(probs, k=min(3, NUM_CLASSES), dim=-1)
