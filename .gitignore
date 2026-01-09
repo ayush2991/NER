@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.jsonl
+*.json
+*.pth
+.DS_Store
+venv/
+env/
+.idea/
+.vscode/
