@@ -1,4 +1,4 @@
-Epoch 1/10 | Train Loss: 0.6680 | Val Loss: 0.2310 | Val Acc: 0.9320 | F1: 0.7088 (P: 0.8031, R: 0.6343)
+Epoch 1/10 | Train Loss: 0.6708 | Val Loss: 0.2107 | Val Acc: 0.9395 | F1: 0.7376 (P: 0.8337, R: 0.6614)
 Sample Predictions (Epoch 1):
 
 --- Test Sample 1 ---
@@ -84,7 +84,7 @@ and                  O                    O
 Plan                 O                    O                   
 :                    O                    O                   
 #                    O                    O                   
-col                  B-DISEASE            I-DISEASE           
+col                  B-DISEASE            B-DISEASE           
 on                   I-DISEASE            O                   
 cancer               I-DISEASE            I-DISEASE           
 -                    O                    O                   
@@ -107,7 +107,7 @@ ptoms                O                    O
 We                   O                    O                   
 will                 O                    O                   
 incre                O                    O                   
-ase                  O                    I-DISEASE           
+ase                  O                    O                   
 the                  O                    O                   
 dos                  O                    O                   
 age                  O                    O                   
@@ -127,7 +127,7 @@ daily                O                    O
 Pat                  O                    O                   
 ient                 O                    O                   
 was                  O                    O                   
-ad                   O                    I-MEDICATION        
+ad                   O                    O                   
 vised                O                    O                   
 to                   O                    O                   
 monitor              O                    O                   
@@ -190,7 +190,7 @@ air                  O                    O
 ment                 O                    O                   
 secondary            O                    O                   
 to                   O                    O                   
-vert                 B-DISEASE            B-DISEASE           
+vert                 B-DISEASE            I-MEDICATION        
 igo                  I-DISEASE            I-DISEASE           
 .                    O                    O                   
 Please               O                    O                   
@@ -199,7 +199,7 @@ and                  O                    O
 conf                 O                    O                   
 irm                  O                    O                   
 if                   O                    O                   
-m                    B-MEDICATION         I-MEDICATION        
+m                    B-MEDICATION         B-DISEASE           
 eth                  I-MEDICATION         I-MEDICATION        
 ot                   I-MEDICATION         I-MEDICATION        
 rex                  I-MEDICATION         I-MEDICATION        
@@ -211,7 +211,7 @@ ment                 O                    O
 .                    O                    O                   
 ------------------------------------------------------------
 
-Epoch 2/10 | Train Loss: 0.0881 | Val Loss: 0.1192 | Val Acc: 0.9758 | F1: 0.8889 (P: 0.9261, R: 0.8545)
+Epoch 2/10 | Train Loss: 0.0804 | Val Loss: 0.1011 | Val Acc: 0.9769 | F1: 0.8941 (P: 0.9293, R: 0.8615)
 Sample Predictions (Epoch 2):
 
 --- Test Sample 1 ---
@@ -297,7 +297,7 @@ and                  O                    O
 Plan                 O                    O                   
 :                    O                    O                   
 #                    O                    O                   
-col                  B-DISEASE            I-DISEASE           
+col                  B-DISEASE            B-DISEASE           
 on                   I-DISEASE            I-DISEASE           
 cancer               I-DISEASE            I-DISEASE           
 -                    O                    O                   
@@ -424,7 +424,7 @@ ment                 O                    O
 .                    O                    O                   
 ------------------------------------------------------------
 
-Epoch 3/10 | Train Loss: 0.0157 | Val Loss: 0.1177 | Val Acc: 0.9786 | F1: 0.9057 (P: 0.9386, R: 0.8751)
+Epoch 3/10 | Train Loss: 0.0170 | Val Loss: 0.0976 | Val Acc: 0.9817 | F1: 0.9183 (P: 0.9446, R: 0.8934)
 Sample Predictions (Epoch 3):
 
 --- Test Sample 1 ---
@@ -637,7 +637,7 @@ ment                 O                    O
 .                    O                    O                   
 ------------------------------------------------------------
 
-Epoch 4/10 | Train Loss: 0.0081 | Val Loss: 0.1208 | Val Acc: 0.9801 | F1: 0.9165 (P: 0.9533, R: 0.8825)
+Epoch 4/10 | Train Loss: 0.0072 | Val Loss: 0.0949 | Val Acc: 0.9841 | F1: 0.9277 (P: 0.9539, R: 0.9030)
 Sample Predictions (Epoch 4):
 
 --- Test Sample 1 ---
@@ -850,7 +850,7 @@ ment                 O                    O
 .                    O                    O                   
 ------------------------------------------------------------
 
-Epoch 5/10 | Train Loss: 0.0054 | Val Loss: 0.1236 | Val Acc: 0.9806 | F1: 0.9137 (P: 0.9466, R: 0.8829)
+Epoch 5/10 | Train Loss: 0.0051 | Val Loss: 0.0898 | Val Acc: 0.9844 | F1: 0.9316 (P: 0.9538, R: 0.9104)
 Sample Predictions (Epoch 5):
 
 --- Test Sample 1 ---
@@ -1063,7 +1063,7 @@ ment                 O                    O
 .                    O                    O                   
 ------------------------------------------------------------
 
-Epoch 6/10 | Train Loss: 0.0030 | Val Loss: 0.1075 | Val Acc: 0.9832 | F1: 0.9228 (P: 0.9488, R: 0.8982)
+Epoch 6/10 | Train Loss: 0.0032 | Val Loss: 0.1004 | Val Acc: 0.9832 | F1: 0.9269 (P: 0.9580, R: 0.8978)
 Sample Predictions (Epoch 6):
 
 --- Test Sample 1 ---
@@ -1276,7 +1276,7 @@ ment                 O                    O
 .                    O                    O                   
 ------------------------------------------------------------
 
-Epoch 7/10 | Train Loss: 0.0023 | Val Loss: 0.1151 | Val Acc: 0.9823 | F1: 0.9186 (P: 0.9467, R: 0.8921)
+Epoch 7/10 | Train Loss: 0.0018 | Val Loss: 0.0963 | Val Acc: 0.9847 | F1: 0.9330 (P: 0.9607, R: 0.9069)
 Sample Predictions (Epoch 7):
 
 --- Test Sample 1 ---
@@ -1489,7 +1489,7 @@ ment                 O                    O
 .                    O                    O                   
 ------------------------------------------------------------
 
-Epoch 8/10 | Train Loss: 0.0013 | Val Loss: 0.1073 | Val Acc: 0.9834 | F1: 0.9218 (P: 0.9458, R: 0.8991)
+Epoch 8/10 | Train Loss: 0.0011 | Val Loss: 0.0895 | Val Acc: 0.9858 | F1: 0.9349 (P: 0.9574, R: 0.9135)
 Sample Predictions (Epoch 8):
 
 --- Test Sample 1 ---
@@ -1702,7 +1702,7 @@ ment                 O                    O
 .                    O                    O                   
 ------------------------------------------------------------
 
-Epoch 9/10 | Train Loss: 0.0009 | Val Loss: 0.1131 | Val Acc: 0.9824 | F1: 0.9170 (P: 0.9424, R: 0.8930)
+Epoch 9/10 | Train Loss: 0.0008 | Val Loss: 0.0965 | Val Acc: 0.9854 | F1: 0.9369 (P: 0.9644, R: 0.9109)
 Sample Predictions (Epoch 9):
 
 --- Test Sample 1 ---
@@ -1915,7 +1915,7 @@ ment                 O                    O
 .                    O                    O                   
 ------------------------------------------------------------
 
-Epoch 10/10 | Train Loss: 0.0007 | Val Loss: 0.1139 | Val Acc: 0.9825 | F1: 0.9172 (P: 0.9424, R: 0.8934)
+Epoch 10/10 | Train Loss: 0.0006 | Val Loss: 0.0978 | Val Acc: 0.9851 | F1: 0.9349 (P: 0.9621, R: 0.9091)
 Sample Predictions (Epoch 10):
 
 --- Test Sample 1 ---

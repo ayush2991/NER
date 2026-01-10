@@ -1,0 +1,28 @@
+--- NER Model Summary ---
+
+NERTransformer(
+  (embedding): Embedding(50258, 128)
+  (pos_encoder): PositionalEncoding()
+  (transformer_encoder): TransformerEncoder(
+    (layers): ModuleList(
+      (0-1): 2 x TransformerEncoderLayer(
+        (self_attn): MultiheadAttention(
+          (out_proj): NonDynamicallyQuantizableLinear(in_features=128, out_features=128, bias=True)
+        )
+        (linear1): Linear(in_features=128, out_features=256, bias=True)
+        (dropout): Dropout(p=0.1, inplace=False)
+        (linear2): Linear(in_features=256, out_features=128, bias=True)
+        (norm1): LayerNorm((128,), eps=1e-05, elementwise_affine=True)
+        (norm2): LayerNorm((128,), eps=1e-05, elementwise_affine=True)
+        (dropout1): Dropout(p=0.1, inplace=False)
+        (dropout2): Dropout(p=0.1, inplace=False)
+      )
+    )
+  )
+  (classifier): Linear(in_features=128, out_features=6, bias=True)
+  (dropout): Dropout(p=0.1, inplace=False)
+)
+
+Total Parameters: 6,698,758
+Trainable Parameters: 6,698,758
+Non-trainable Parameters: 0
